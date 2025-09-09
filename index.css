@@ -1,0 +1,75 @@
+/* #ifndef APP-PLUS-NVUE */
+/* H5和微信小程序支持的样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-user-drag: none; /* 禁止用户拖拽 */
+}
+
+button::after {
+  border: none;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+/* H5和微信小程序支持的隐藏样式 */
+.hidden-shops,
+.hidden-cny,
+.hidden-desc {
+  display: none;
+}
+/* #endif */
+
+/* #ifdef APP-PLUS-NVUE */
+/* nvue中支持的样式 */
+/* nvue 中只支持 class 选择器，不支持通配符和伪元素 */
+/* 移除不兼容的选择器和属性 */
+
+/* nvue中支持的隐藏样式 */
+.hidden-shops,
+.hidden-cny,
+.hidden-desc {
+  opacity: 0;
+  visibility: hidden;
+}
+/* #endif */
+
+/* 通用样式 - 所有平台都支持 */
+.flex {
+  display: flex;
+}
+
+.flex-item {
+  align-items: center;
+}
+
+.flex-content {
+  justify-content: center;
+}
+
+.flex-between {
+  justify-content: space-between;
+}
+
+.flex-column {
+  flex-direction: column;
+}
