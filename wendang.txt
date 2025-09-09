@@ -1,0 +1,5 @@
+不需要node
+manifest.json  里面的域名换成自己的
+utils/utils.js  里面的域名换成自己的
+i18n/index.js  设置默认语言
+\unpackage\dist\build  编译后文件位置 一般是H5 可能是web
