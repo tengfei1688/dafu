@@ -47,49 +47,111 @@
 		},
 		mounted() {
 			// 设置ECharts环境
-			this.$echarts.env.touchEventsSupported = true;
-			this.$echarts.env.wxa = false;
-			this.$echarts.env.canvasSupported = false;
-			this.$echarts.env.svgSupported = true;
-			this.$echarts.env.domSupported = true;
+			if (this.$echarts) {
+				this.$echarts.env.touchEventsSupported = true;
+				this.$echarts.env.wxa = false;
+				this.$echarts.env.canvasSupported = false;
+				this.$echarts.env.svgSupported = true;
+				this.$echarts.env.domSupported = true;
+			} else {
+				console.error('ECharts not available');
+				return;
+			}
 			
 			// 延迟初始化，确保DOM已渲染
 			this.$nextTick(() => {
 				setTimeout(() => {
-					this.init();
+					this.initWithRetry();
 				}, 100);
 			});
 		},
 		methods: {
+			// 带重试机制的初始化
+			initWithRetry(retryCount = 0) {
+				const maxRetries = 3;
+				
+				try {
+					this.init();
+					// 如果初始化成功但没有图表实例，进行重试
+					if (!this.chartInstance && retryCount < maxRetries) {
+						console.log(`初始化失败，重试第 ${retryCount + 1} 次`);
+						setTimeout(() => {
+							this.initWithRetry(retryCount + 1);
+						}, 500 * (retryCount + 1)); // 递增延迟
+					}
+				} catch (error) {
+					console.error('K线初始化错误:', error);
+					if (retryCount < maxRetries) {
+						console.log(`初始化异常，重试第 ${retryCount + 1} 次`);
+						setTimeout(() => {
+							this.initWithRetry(retryCount + 1);
+						}, 1000 * (retryCount + 1)); // 递增延迟
+					} else {
+						console.error('K线初始化最终失败');
+					}
+				}
+			},
+			
 			init() {
 				// 检查是否已经初始化过
 				if (this.chartInstance) {
 					return;
 				}
 				
+				// 检查ECharts是否可用
+				if (!this.$echarts) {
+					console.error('ECharts未加载');
+					return;
+				}
+				
 				// #ifdef H5
 				const element = document.getElementById(this.chartId);
 				if (element) {
-					this.chartInstance = this.$echarts.init(element);
-					// 如果有数据，立即渲染
-					if (this.displayKlineData && this.displayKlineData.length > 0) {
-						this.renderChart();
+					try {
+						this.chartInstance = this.$echarts.init(element);
+						console.log('H5环境下ECharts初始化成功');
+						// 如果有数据，立即渲染
+						if (this.displayKlineData && this.displayKlineData.length > 0) {
+							this.renderChart();
+						}
+					} catch (error) {
+						console.error('H5环境ECharts初始化失败:', error);
+						throw error;
 					}
+				} else {
+					console.error('找不到DOM元素:', this.chartId);
+					throw new Error('DOM element not found');
 				}
 				// #endif
 				
 				// #ifdef APP-PLUS
 				// 手机端使用uni-app的方式获取元素
-				const query = uni.createSelectorQuery().in(this);
-				query.select('#' + this.chartId).boundingClientRect((data) => {
-					if (data && !this.chartInstance) {
-						this.chartInstance = this.$echarts.init(data);
-						// 如果有数据，立即渲染
-						if (this.displayKlineData && this.displayKlineData.length > 0) {
-							this.renderChart();
+				try {
+					const query = uni.createSelectorQuery().in(this);
+					query.select('#' + this.chartId).boundingClientRect((data) => {
+						if (data && !this.chartInstance) {
+							try {
+								// 在APP环境中，需要使用不同的初始化方式
+								this.chartInstance = this.$echarts.init(null, null, {
+									width: data.width,
+									height: data.height
+								});
+								console.log('APP环境下ECharts初始化成功');
+								// 如果有数据，立即渲染
+								if (this.displayKlineData && this.displayKlineData.length > 0) {
+									this.renderChart();
+								}
+							} catch (error) {
+								console.error('APP环境ECharts初始化失败:', error);
+							}
+						} else if (!data) {
+							console.error('APP环境无法获取DOM信息');
 						}
-					}
-				}).exec();
+					}).exec();
+				} catch (error) {
+					console.error('APP环境查询元素失败:', error);
+					throw error;
+				}
 				// #endif
 			},
 			
@@ -154,41 +216,93 @@
 			},
 			
 			renderChart() {
-				if (!this.chartInstance) return;
+				if (!this.chartInstance) {
+					console.warn('图表实例不存在，尝试重新初始化');
+					this.initWithRetry();
+					return;
+				}
 				
-				const upColor = '#00da3c';
-				const downColor = '#ec0000'
-				let data = this.formatData(this.displayKlineData);
+				try {
+					const upColor = '#00da3c';
+					const downColor = '#ec0000'
+					let data = this.formatData(this.displayKlineData);
 
-				if (this.displayKlineData && this.displayKlineData.length) {
-					let option = this.createChartOption(data, upColor, downColor);
-					this.chartInstance.setOption(option);
+					if (this.displayKlineData && this.displayKlineData.length) {
+						let option = this.createChartOption(data, upColor, downColor);
+						this.chartInstance.setOption(option);
+						console.log('图表渲染成功，数据量:', this.displayKlineData.length);
+					} else {
+						console.warn('没有可渲染的K线数据');
+					}
+				} catch (error) {
+					console.error('图表渲染失败:', error);
+					// 尝试重新初始化
+					this.chartInstance = null;
+					this.initWithRetry();
 				}
 			},
 			
 			// 更新图表显示
 			updateChart() {
 				if (this.chartInstance) {
-					this.renderChart();
+					try {
+						this.renderChart();
+					} catch (error) {
+						console.error('更新图表失败:', error);
+						// 图表实例可能已损坏，重新初始化
+						this.chartInstance = null;
+						this.initWithRetry();
+					}
+				} else {
+					console.warn('图表实例不存在，尝试初始化');
+					this.initWithRetry();
 				}
 			},
 			
 			formatData(rawData) {
-				if (!rawData || !Array.isArray(rawData)) return { categoryData: [], values: [], volumes: [] };
+				if (!rawData || !Array.isArray(rawData)) {
+					console.warn('K线数据格式错误:', rawData);
+					return { categoryData: [], values: [], volumes: [] };
+				}
 				
 				let categoryData = [];
 				let values = [];
 				let volumes = [];
-				rawData.forEach((item, index) => {
-					categoryData.push(item.time);
-					values.push([item.open, item.close, item.low, item.high])
-					volumes.push([index, item.volume, item.open > item.close ? 1 : -1]);
-				})
+				
+				try {
+					rawData.forEach((item, index) => {
+						// 验证数据完整性
+						if (item && typeof item === 'object' && 
+							item.hasOwnProperty('time') && 
+							item.hasOwnProperty('open') && 
+							item.hasOwnProperty('close') && 
+							item.hasOwnProperty('low') && 
+							item.hasOwnProperty('high') &&
+							item.hasOwnProperty('volume')) {
+							
+							categoryData.push(item.time);
+							values.push([
+								parseFloat(item.open) || 0,
+								parseFloat(item.close) || 0,
+								parseFloat(item.low) || 0,
+								parseFloat(item.high) || 0
+							]);
+							volumes.push([index, parseFloat(item.volume) || 0, parseFloat(item.open) > parseFloat(item.close) ? 1 : -1]);
+						} else {
+							console.warn('无效的K线数据项:', item, 'index:', index);
+						}
+					});
+					
+					console.log('数据格式化完成，有效数据量:', values.length);
+				} catch (error) {
+					console.error('数据格式化失败:', error);
+				}
+				
 				return {
 					categoryData: categoryData,
 					values: values,
 					volumes: volumes
-				}
+				};
 			},
 			
 			calculateMA(dayCount, data) {
@@ -227,36 +341,56 @@
 							return obj;
 						},
 						formatter: function(params) {
-							const themeColor = params[5].value[3] > 0 ? upColor : downColor
-							const param = params[0];
-							return `
-						<ul style="border-color:${themeColor}">
-							<li> 
-								<div class="dot" style="background-color:${themeColor}"></div>
-								 <span>${param.name}</span> 
-							</li>
-							<li>
-								 <div class="dot" style="background-color:${themeColor}"></div> 
-								 <span>open <span>${param.data[0]}</span></span>
-							</li>
-							<li> 
-								<div class="dot" style="background-color:${themeColor}"></div>
-								 <span>close <span>${param.data[1]}</span></span> 
-							</li>
-							<li> 
-								<div class="dot" style="background-color:${themeColor}"></div>
-								 <span>low <span>${param.data[2]}</span></span> 
-							</li>
-							<li> 
-								<div class="dot" style="background-color:${themeColor}"></div>
-								 <span>high <span>${param.data[3]}</span></span> 
-							</li>
-							<li> 
-								<div class="dot" style="background-color:${themeColor}"></div>
-								 <span>volume <span>${params[5].data[1]}</span></span> 
-							</li>
-						</ul>
-					`
+							try {
+								if (!params || !Array.isArray(params) || params.length === 0) {
+									return '';
+								}
+								
+								const param = params[0];
+								if (!param || !param.data) {
+									return '';
+								}
+								
+								// 安全地获取颜色
+								let themeColor = upColor; // 默认颜色
+								if (params.length > 5 && params[5] && params[5].value && params[5].value.length > 3) {
+									themeColor = params[5].value[3] > 0 ? upColor : downColor;
+								} else if (param.data && param.data.length >= 2) {
+									themeColor = param.data[1] > param.data[0] ? upColor : downColor;
+								}
+								
+								return `
+							<ul style="border-color:${themeColor}">
+								<li> 
+									<div class="dot" style="background-color:${themeColor}"></div>
+									 <span>${param.name || ''}</span> 
+								</li>
+								<li>
+									 <div class="dot" style="background-color:${themeColor}"></div> 
+									 <span>open <span>${param.data[0] || 0}</span></span>
+								</li>
+								<li> 
+									<div class="dot" style="background-color:${themeColor}"></div>
+									 <span>close <span>${param.data[1] || 0}</span></span> 
+								</li>
+								<li> 
+									<div class="dot" style="background-color:${themeColor}"></div>
+									 <span>low <span>${param.data[2] || 0}</span></span> 
+								</li>
+								<li> 
+									<div class="dot" style="background-color:${themeColor}"></div>
+									 <span>high <span>${param.data[3] || 0}</span></span> 
+								</li>
+								<li> 
+									<div class="dot" style="background-color:${themeColor}"></div>
+									 <span>volume <span>${(params[5] && params[5].data && params[5].data[1]) || 0}</span></span> 
+								</li>
+							</ul>
+						`
+							} catch (error) {
+								console.error('Tooltip格式化错误:', error);
+								return '';
+							}
 						}
 					},
 					legend: {

@@ -22,7 +22,8 @@ page {
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* 全局滚动条样式 */
+/* #ifdef H5 */
+/* 全局滚动条样式 (仅H5环境支持) */
 ::-webkit-scrollbar {
 	width: 6px;
 	height: 6px;
@@ -41,4 +42,5 @@ page {
 ::-webkit-scrollbar-thumb:hover {
 	background: #a8a8a8;
 }
+/* #endif */
 </style>
