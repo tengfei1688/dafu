@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K线图</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        #kline-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        .error-message {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background-color: #f6f7fb;
+            color: #a8a9ac;
+            font-size: 14px;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background-color: #f6f7fb;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="kline-container">
+        <div class="loading">正在加载K线图...</div>
+    </div>
+    
+    <script>
+        console.log('K线WebView页面开始加载...');
+        
+        // 获取URL参数中的数据
+        function getUrlParams() {
+            const params = {};
+            const search = window.location.search.substring(1);
+            const pairs = search.split('&');
+            
+            for (let pair of pairs) {
+                const [key, value] = pair.split('=');
+                if (key && value) {
+                    params[decodeURIComponent(key)] = decodeURIComponent(value);
+                }
+            }
+            return params;
+        }
+        
+        // 验证和格式化K线数据
+        function validateAndFormatData(rawData) {
+            if (!rawData || !Array.isArray(rawData) || rawData.length === 0) {
+                console.warn('WebView: K线数据为空或格式不正确');
+                return null;
+            }
+            
+            // 验证数据结构
+            const firstItem = rawData[0];
+            const requiredFields = ['time', 'open', 'close', 'high', 'low', 'volume'];
+            
+            const isValid = requiredFields.every(field => {
+                return firstItem.hasOwnProperty(field) && 
+                       (field === 'time' || typeof firstItem[field] === 'number');
+            });
+            
+            if (!isValid) {
+                console.warn('WebView: K线数据结构验证失败');
+                return null;
+            }
+            
+            console.log('WebView: K线数据验证通过，共', rawData.length, '条记录');
+            return rawData;
+        }
+        
+        // 格式化数据用于ECharts
+        function formatDataForECharts(rawData) {
+            if (!rawData) return { categoryData: [], values: [], volumes: [] };
+            
+            let categoryData = [];
+            let values = [];
+            let volumes = [];
+            
+            rawData.forEach((item, index) => {
+                categoryData.push(item.time);
+                values.push([item.open, item.close, item.low, item.high]);
+                volumes.push([index, item.volume, item.open > item.close ? 1 : -1]);
+            });
+            
+            return {
+                categoryData: categoryData,
+                values: values,
+                volumes: volumes
+            };
+        }
+        
+        // 计算移动平均线
+        function calculateMA(dayCount, data) {
+            let result = [];
+            for (let i = 0, len = data.values.length; i < len; i++) {
+                if (i < dayCount) {
+                    result.push('-');
+                    continue;
+                }
+                let sum = 0;
+                for (let j = 0; j < dayCount; j++) {
+                    sum += data.values[i - j][1];
+                }
+                result.push(+(sum / dayCount).toFixed(3));
+            }
+            return result;
+        }
+        
+        // 创建图表配置
+        function createChartOption(data) {
+            const upColor = '#00da3c';
+            const downColor = '#ec0000';
+            
+            return {
+                animation: true,
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    backgroundColor: 'rgba(50,50,50,0.9)',
+                    textStyle: { color: '#fff' }
+                },
+                legend: {
+                    data: ['K线', 'MA5', 'MA10', 'MA20', 'MA30']
+                },
+                grid: [{
+                    left: '10%',
+                    right: '10%',
+                    height: '60%'
+                }, {
+                    left: '10%',
+                    right: '10%',
+                    top: '75%',
+                    height: '15%'
+                }],
+                xAxis: [{
+                    type: 'category',
+                    data: data.categoryData,
+                    scale: true,
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    splitLine: { show: false }
+                }, {
+                    type: 'category',
+                    gridIndex: 1,
+                    data: data.categoryData,
+                    scale: true,
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: { show: false }
+                }],
+                yAxis: [{
+                    scale: true,
+                    splitArea: { show: true }
+                }, {
+                    scale: true,
+                    gridIndex: 1,
+                    splitNumber: 2,
+                    axisLabel: { show: false },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false }
+                }],
+                dataZoom: [{
+                    type: 'inside',
+                    xAxisIndex: [0, 1],
+                    start: 70,
+                    end: 100
+                }, {
+                    show: true,
+                    xAxisIndex: [0, 1],
+                    type: 'slider',
+                    bottom: '5%',
+                    start: 70,
+                    end: 100,
+                    height: 20
+                }],
+                series: [{
+                    name: 'K线',
+                    type: 'candlestick',
+                    data: data.values,
+                    itemStyle: {
+                        color: upColor,
+                        color0: downColor,
+                        borderColor: upColor,
+                        borderColor0: downColor
+                    }
+                }, {
+                    name: 'MA5',
+                    type: 'line',
+                    data: calculateMA(5, data),
+                    smooth: true,
+                    lineStyle: { opacity: 0.5 }
+                }, {
+                    name: 'MA10',
+                    type: 'line',
+                    data: calculateMA(10, data),
+                    smooth: true,
+                    lineStyle: { opacity: 0.5 }
+                }, {
+                    name: 'MA20',
+                    type: 'line',
+                    data: calculateMA(20, data),
+                    smooth: true,
+                    lineStyle: { opacity: 0.5 }
+                }, {
+                    name: 'MA30',
+                    type: 'line',
+                    data: calculateMA(30, data),
+                    smooth: true,
+                    lineStyle: { opacity: 0.5 }
+                }, {
+                    name: 'Volume',
+                    type: 'bar',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: data.volumes
+                }]
+            };
+        }
+        
+        // 显示错误信息
+        function showError(message) {
+            const container = document.getElementById('kline-container');
+            container.innerHTML = `<div class="error-message">${message}</div>`;
+            console.error('WebView K线图错误:', message);
+        }
+        
+        // 默认测试数据
+        const defaultKlineData = [
+            { time: '09:30', open: 100.5, close: 102.3, high: 103.1, low: 99.8, volume: 15000 },
+            { time: '09:35', open: 102.3, close: 101.8, high: 103.5, low: 101.2, volume: 12000 },
+            { time: '09:40', open: 101.8, close: 103.2, high: 104.0, low: 101.5, volume: 18000 },
+            { time: '09:45', open: 103.2, close: 102.9, high: 104.2, low: 102.1, volume: 14000 },
+            { time: '09:50', open: 102.9, close: 104.1, high: 104.8, low: 102.5, volume: 16000 }
+        ];
+        
+        // 初始化图表
+        function initChart() {
+            try {
+                // 检查ECharts是否加载成功
+                if (typeof echarts === 'undefined') {
+                    showError('ECharts库加载失败');
+                    return;
+                }
+                
+                const params = getUrlParams();
+                let klineData = null;
+                
+                // 尝试解析传递的数据
+                if (params.data) {
+                    try {
+                        const rawData = JSON.parse(params.data);
+                        klineData = validateAndFormatData(rawData);
+                    } catch (error) {
+                        console.warn('WebView: 解析传递数据失败:', error);
+                    }
+                }
+                
+                // 如果没有有效数据，使用默认数据
+                if (!klineData) {
+                    console.log('WebView: 使用默认测试数据');
+                    klineData = validateAndFormatData(defaultKlineData);
+                }
+                
+                if (!klineData) {
+                    showError('无法获取有效的K线数据');
+                    return;
+                }
+                
+                // 格式化数据
+                const formattedData = formatDataForECharts(klineData);
+                
+                // 创建图表
+                const container = document.getElementById('kline-container');
+                container.innerHTML = ''; // 清空loading
+                
+                const chart = echarts.init(container);
+                const option = createChartOption(formattedData);
+                
+                chart.setOption(option);
+                console.log('WebView: K线图渲染成功');
+                
+                // 响应式调整
+                window.addEventListener('resize', function() {
+                    chart.resize();
+                });
+                
+            } catch (error) {
+                showError('初始化K线图失败: ' + error.message);
+                console.error('WebView初始化错误:', error);
+            }
+        }
+        
+        // 页面加载完成后初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initChart);
+        } else {
+            initChart();
+        }
+    </script>
+</body>
+</html>

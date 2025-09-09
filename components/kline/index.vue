@@ -1,6 +1,12 @@
 <template>
 	<view class="chart">
-		<view :id="chartId" class="kline">
+		<view :id="chartId" class="kline" v-if="!useWebView">
+		</view>
+		<!-- WebView回退机制 -->
+		<web-view v-else :src="webViewUrl" class="kline-webview"></web-view>
+		<!-- 数据为空提示 -->
+		<view v-if="!hasValidData && !useWebView" class="no-data-tip">
+			<text>{{ $t ? $t('detail.zwsj') : '暂无数据' }}</text>
 		</view>
 		<!-- 价格变化指示器 -->
 		<view v-if="priceChange.show" :class="['price-change', priceChange.direction, priceChange.show ? 'show' : '']">
@@ -21,24 +27,96 @@
 				displayKlineData: [], // 显示用的K线数据
 				updateTimer: null, // 5秒更新定时器
 				lastUpdateTime: 0, // 上次更新时间
+				useWebView: false, // 是否使用WebView回退
+				webViewUrl: '', // WebView URL
 				priceChange: {
 					show: false,
 					direction: 'up',
 					value: '0.0000'
-				}
+				},
+				// 默认测试数据
+				defaultKlineData: [
+					{
+						time: '09:30',
+						open: 100.5,
+						close: 102.3,
+						high: 103.1,
+						low: 99.8,
+						volume: 15000
+					},
+					{
+						time: '09:35',
+						open: 102.3,
+						close: 101.8,
+						high: 103.5,
+						low: 101.2,
+						volume: 12000
+					},
+					{
+						time: '09:40',
+						open: 101.8,
+						close: 103.2,
+						high: 104.0,
+						low: 101.5,
+						volume: 18000
+					},
+					{
+						time: '09:45',
+						open: 103.2,
+						close: 102.9,
+						high: 104.2,
+						low: 102.1,
+						volume: 14000
+					},
+					{
+						time: '09:50',
+						open: 102.9,
+						close: 104.1,
+						high: 104.8,
+						low: 102.5,
+						volume: 16000
+					}
+				]
+			}
+		},
+		computed: {
+			hasValidData() {
+				return this.displayKlineData && this.displayKlineData.length > 0;
 			}
 		},
 		watch: {
 			data: {
 				handler(newData) {
-					if (newData && newData.length > 0) {
-						this.realKlineData = [...newData];
-						this.displayKlineData = [...newData];
-						this.startDisplayUpdate();
-						// 确保图表实例已创建后再更新
-						if (this.chartInstance) {
-							this.updateChart();
+					console.log('K线数据更新:', newData ? newData.length : 0, '条记录');
+					
+					// 数据验证和处理
+					if (newData && Array.isArray(newData) && newData.length > 0) {
+						// 验证数据结构
+						const isValidData = this.validateKlineData(newData);
+						if (isValidData) {
+							this.realKlineData = [...newData];
+							this.displayKlineData = [...newData];
+							console.log('K线数据验证通过，开始更新图表');
+						} else {
+							console.warn('K线数据格式不正确，使用默认数据');
+							this.realKlineData = [...this.defaultKlineData];
+							this.displayKlineData = [...this.defaultKlineData];
 						}
+					} else {
+						console.warn('K线数据为空，使用默认数据');
+						this.realKlineData = [...this.defaultKlineData];
+						this.displayKlineData = [...this.defaultKlineData];
+					}
+					
+					this.startDisplayUpdate();
+					// 确保图表实例已创建后再更新
+					if (this.chartInstance) {
+						this.updateChart();
+					} else {
+						// 如果图表未初始化，延迟初始化
+						this.$nextTick(() => {
+							this.init();
+						});
 					}
 				},
 				immediate: true,
@@ -46,6 +124,17 @@
 			}
 		},
 		mounted() {
+			console.log('K线组件开始初始化...');
+			
+			// 检查ECharts是否可用
+			if (!this.$echarts) {
+				console.error('ECharts库未加载，当前环境不支持原生渲染');
+				// #ifdef APP-PLUS
+				this.initWebViewFallback();
+				// #endif
+				return;
+			}
+			
 			// 设置ECharts环境
 			this.$echarts.env.touchEventsSupported = true;
 			this.$echarts.env.wxa = false;
@@ -63,34 +152,103 @@
 		methods: {
 			init() {
 				// 检查是否已经初始化过
-				if (this.chartInstance) {
+				if (this.chartInstance || this.useWebView) {
 					return;
 				}
 				
+				console.log('开始初始化K线图表...');
+				
 				// #ifdef H5
-				const element = document.getElementById(this.chartId);
-				if (element) {
-					this.chartInstance = this.$echarts.init(element);
-					// 如果有数据，立即渲染
-					if (this.displayKlineData && this.displayKlineData.length > 0) {
-						this.renderChart();
+				try {
+					const element = document.getElementById(this.chartId);
+					if (element) {
+						this.chartInstance = this.$echarts.init(element);
+						console.log('H5环境图表初始化成功');
+						// 如果有数据，立即渲染
+						if (this.hasValidData) {
+							this.renderChart();
+						}
+					} else {
+						console.error('H5环境：找不到图表DOM元素', this.chartId);
 					}
+				} catch (error) {
+					console.error('H5环境图表初始化失败:', error);
 				}
 				// #endif
 				
 				// #ifdef APP-PLUS
-				// 手机端使用uni-app的方式获取元素
-				const query = uni.createSelectorQuery().in(this);
-				query.select('#' + this.chartId).boundingClientRect((data) => {
-					if (data && !this.chartInstance) {
-						this.chartInstance = this.$echarts.init(data);
-						// 如果有数据，立即渲染
-						if (this.displayKlineData && this.displayKlineData.length > 0) {
-							this.renderChart();
+				try {
+					// APP环境下使用uni-app方式
+					const query = uni.createSelectorQuery().in(this);
+					query.select('#' + this.chartId).fields({
+						node: true,
+						size: true
+					}).exec((res) => {
+						if (res && res[0]) {
+							try {
+								// 在APP环境中，我们需要创建canvas context
+								const canvas = res[0].node;
+								if (canvas) {
+									const ctx = canvas.getContext('2d');
+									this.chartInstance = this.$echarts.init(canvas, null, {
+										width: res[0].width,
+										height: res[0].height,
+										devicePixelRatio: uni.getSystemInfoSync().pixelRatio || 1
+									});
+									console.log('APP环境图表初始化成功');
+									// 如果有数据，立即渲染
+									if (this.hasValidData) {
+										this.renderChart();
+									}
+								} else {
+									throw new Error('无法获取canvas节点');
+								}
+							} catch (error) {
+								console.error('APP环境图表初始化失败:', error);
+								this.initWebViewFallback();
+							}
+						} else {
+							console.error('APP环境：无法获取节点信息');
+							this.initWebViewFallback();
 						}
-					}
-				}).exec();
+					});
+				} catch (error) {
+					console.error('APP环境查询节点失败:', error);
+					this.initWebViewFallback();
+				}
 				// #endif
+			},
+			
+			// 验证K线数据格式
+			validateKlineData(data) {
+				if (!Array.isArray(data) || data.length === 0) {
+					return false;
+				}
+				
+				// 检查第一个数据项的结构
+				const firstItem = data[0];
+				const requiredFields = ['time', 'open', 'close', 'high', 'low', 'volume'];
+				
+				return requiredFields.every(field => {
+					return firstItem.hasOwnProperty(field) && 
+						   (field === 'time' || typeof firstItem[field] === 'number');
+				});
+			},
+			
+			// WebView回退机制
+			initWebViewFallback() {
+				console.log('初始化WebView回退机制...');
+				try {
+					// 构建WebView URL，传递数据
+					const baseUrl = '/static/kline-h5.html';
+					const klineData = encodeURIComponent(JSON.stringify(this.displayKlineData));
+					this.webViewUrl = `${baseUrl}?data=${klineData}`;
+					this.useWebView = true;
+					console.log('WebView回退初始化成功');
+				} catch (error) {
+					console.error('WebView初始化失败:', error, 'K线数据为空');
+					this.useWebView = false;
+				}
 			},
 			
 			// 开始5秒显示更新
@@ -406,6 +564,22 @@
 	.kline {
 		width: 100%;
 		height: 400px;
+	}
+	
+	.kline-webview {
+		width: 100%;
+		height: 400px;
+	}
+	
+	.no-data-tip {
+		width: 100%;
+		height: 400px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: #f6f7fb;
+		color: #a8a9ac;
+		font-size: 14px;
 	}
 	
 	/* 价格变化指示器 */
