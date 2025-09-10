@@ -15,36 +15,76 @@
 		
 		<!-- K线图表容器 -->
 		<view class="chart-container" :style="{ height: chartHeight + 'px' }">
-			<!-- H5环境：简化为canvas直接渲染 -->
-			<!-- #ifdef H5 -->
-			<canvas 
-				ref="chartCanvas"
-				:id="chartId"
-				canvas-id="kline-canvas"
-				class="chart-canvas"
-				:style="{ width: '100%', height: '100%' }"
-				@touchstart="handleTouch"
-				@touchmove="handleTouch"
-				@touchend="handleTouch"
-			></canvas>
-			<!-- #endif -->
+			<!-- 价格网格线 -->
+			<view class="price-grid">
+				<view 
+					v-for="(line, index) in priceGridLines" 
+					:key="'grid-' + index"
+					class="grid-line"
+					:style="{ bottom: line.position + '%' }"
+				>
+					<text class="grid-price">{{ line.price }}</text>
+				</view>
+			</view>
 			
-			<!-- APP环境：使用简单的柱状图模拟 -->
-			<!-- #ifdef APP-PLUS -->
+			<!-- K线图表主体 -->
 			<scroll-view class="chart-scroll" scroll-x="true">
-				<view class="chart-bars">
-					<view 
-						v-for="(item, index) in displayData" 
-						:key="index"
-						class="bar-item"
-						:style="{
-							height: getBarHeight(item) + 'px',
-							backgroundColor: item.close >= item.open ? '#00da3c' : '#ec0000'
-						}"
-					></view>
+				<view class="chart-content">
+					<!-- K线柱状图 -->
+					<view class="kline-bars">
+						<view 
+							v-for="(item, index) in displayData" 
+							:key="index"
+							class="kline-bar"
+							@tap="selectBar(item, index)"
+						>
+							<!-- 影线（最高最低价线） -->
+							<view 
+								class="shadow-line"
+								:style="{
+									height: getShadowHeight(item) + '%',
+									bottom: getShadowBottom(item) + '%',
+									backgroundColor: item.close >= item.open ? '#00da3c' : '#ec0000'
+								}"
+							></view>
+							
+							<!-- 实体（开盘收盘价矩形） -->
+							<view 
+								class="body-rect"
+								:style="{
+									height: getBodyHeight(item) + '%',
+									bottom: getBodyBottom(item) + '%',
+									backgroundColor: item.close >= item.open ? '#00da3c' : '#ec0000',
+									borderColor: item.close >= item.open ? '#00da3c' : '#ec0000'
+								}"
+							></view>
+						</view>
+					</view>
+					
+					<!-- 成交量柱状图 -->
+					<view class="volume-bars">
+						<view 
+							v-for="(item, index) in displayData" 
+							:key="'vol-' + index"
+							class="volume-bar"
+							:style="{
+								height: getVolumeHeight(item) + '%',
+								backgroundColor: item.close >= item.open ? 'rgba(0, 218, 60, 0.6)' : 'rgba(236, 0, 0, 0.6)'
+							}"
+						></view>
+					</view>
 				</view>
 			</scroll-view>
-			<!-- #endif -->
+			
+			<!-- 价格信息悬浮框 -->
+			<view v-if="selectedBar" class="price-info" :style="priceInfoStyle">
+				<text class="info-time">{{ formatTime(selectedBar.time) }}</text>
+				<text class="info-price">开: {{ selectedBar.open }}</text>
+				<text class="info-price">高: {{ selectedBar.high }}</text>
+				<text class="info-price">低: {{ selectedBar.low }}</text>
+				<text class="info-price">收: {{ selectedBar.close }}</text>
+				<text class="info-volume">量: {{ formatVolume(selectedBar.volume) }}</text>
+			</view>
 			
 			<!-- 加载状态 -->
 			<view v-if="loading" class="loading-overlay">
@@ -76,7 +116,9 @@ export default {
 			loading: false,
 			chartData: [],
 			displayData: [],
-			canvasContext: null,
+			selectedBar: null,
+			priceRange: { min: 0, max: 100 },
+			volumeRange: { min: 0, max: 1000 },
 			timeOptions: [
 				{ label: '1分', value: '1m' },
 				{ label: '5分', value: '5m' },
@@ -86,6 +128,29 @@ export default {
 				{ label: '4时', value: '4h' },
 				{ label: '1日', value: '1d' }
 			]
+		}
+	},
+	computed: {
+		priceGridLines() {
+			if (!this.displayData.length) return [];
+			
+			const { min, max } = this.priceRange;
+			const lines = [];
+			const step = (max - min) / 4; // 5条网格线
+			
+			for (let i = 0; i <= 4; i++) {
+				const price = (min + step * i).toFixed(2);
+				const position = (i / 4) * 100;
+				lines.push({ price, position });
+			}
+			
+			return lines;
+		},
+		
+		priceInfoStyle() {
+			return {
+				display: this.selectedBar ? 'block' : 'none'
+			};
 		}
 	},
 	watch: {
@@ -118,14 +183,7 @@ export default {
 			this.loading = true;
 			
 			try {
-				// #ifdef H5
-				await this.initH5Canvas();
-				// #endif
-				
-				// #ifdef APP-PLUS
-				await this.initAppChart();
-				// #endif
-				
+				await this.updateDisplayData();
 				this.loading = false;
 				console.log('K线图表初始化成功');
 			} catch (err) {
@@ -134,95 +192,72 @@ export default {
 			}
 		},
 		
-		// #ifdef H5
-		async initH5Canvas() {
-			await this.$nextTick();
-			this.canvasContext = uni.createCanvasContext('kline-canvas', this);
-			if (this.chartData && this.chartData.length > 0) {
-				this.drawCanvasChart();
-			}
-		},
-		
-		drawCanvasChart() {
-			if (!this.canvasContext || !this.chartData.length) return;
-			
-			const ctx = this.canvasContext;
-			const data = this.chartData.slice(-50);
-			const canvasWidth = 375;
-			const canvasHeight = this.chartHeight;
-			const barWidth = canvasWidth / data.length;
-			
-			ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-			
-			const prices = data.flatMap(item => [item.high, item.low]);
-			const maxPrice = Math.max(...prices);
-			const minPrice = Math.min(...prices);
-			const priceRange = maxPrice - minPrice;
-			
-			data.forEach((item, index) => {
-				const x = index * barWidth + barWidth / 2;
-				const openY = canvasHeight - ((item.open - minPrice) / priceRange) * canvasHeight;
-				const closeY = canvasHeight - ((item.close - minPrice) / priceRange) * canvasHeight;
-				const highY = canvasHeight - ((item.high - minPrice) / priceRange) * canvasHeight;
-				const lowY = canvasHeight - ((item.low - minPrice) / priceRange) * canvasHeight;
-				
-				const color = item.close >= item.open ? '#00da3c' : '#ec0000';
-				ctx.setStrokeStyle(color);
-				ctx.setFillStyle(color);
-				
-				ctx.beginPath();
-				ctx.moveTo(x, highY);
-				ctx.lineTo(x, lowY);
-				ctx.stroke();
-				
-				const bodyTop = Math.min(openY, closeY);
-				const bodyHeight = Math.abs(closeY - openY);
-				const bodyWidth = barWidth * 0.6;
-				
-				ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight || 1);
-			});
-			
-			ctx.draw();
-		},
-		
-		handleTouch(e) {
-			console.log('图表触摸事件:', e.type);
-		},
-		// #endif
-		
-		// #ifdef APP-PLUS
-		async initAppChart() {
-			this.updateDisplayData();
-		},
-		
 		updateDisplayData() {
 			if (!this.chartData || this.chartData.length === 0) return;
 			
-			this.displayData = this.chartData.slice(-50).map(item => ({
-				...item,
-				barHeight: this.getBarHeight(item)
-			}));
+			// 取最新50条数据显示
+			const data = this.chartData.slice(-50);
+			this.displayData = data;
+			
+			// 计算价格范围
+			const prices = data.flatMap(item => [item.high, item.low]);
+			this.priceRange.max = Math.max(...prices);
+			this.priceRange.min = Math.min(...prices);
+			
+			// 计算成交量范围  
+			const volumes = data.map(item => item.volume);
+			this.volumeRange.max = Math.max(...volumes);
+			this.volumeRange.min = Math.min(...volumes);
 		},
 		
-		getBarHeight(item) {
-			const baseHeight = 20;
-			const maxHeight = this.chartHeight - 40;
-			const range = Math.abs(item.high - item.low);
-			return Math.min(baseHeight + range * 2, maxHeight);
+		// 计算影线高度（百分比）
+		getShadowHeight(item) {
+			const range = this.priceRange.max - this.priceRange.min;
+			if (range === 0) return 0;
+			return ((item.high - item.low) / range) * 80; // 80%为图表有效高度
 		},
-		// #endif
+		
+		// 计算影线底部位置（百分比）
+		getShadowBottom(item) {
+			const range = this.priceRange.max - this.priceRange.min;
+			if (range === 0) return 10;
+			return ((item.low - this.priceRange.min) / range) * 80 + 10; // 10%为底部留白
+		},
+		
+		// 计算实体高度（百分比）
+		getBodyHeight(item) {
+			const range = this.priceRange.max - this.priceRange.min;
+			if (range === 0) return 1;
+			const bodyHeight = Math.abs(item.close - item.open);
+			return Math.max((bodyHeight / range) * 80, 0.5); // 最小高度0.5%
+		},
+		
+		// 计算实体底部位置（百分比）
+		getBodyBottom(item) {
+			const range = this.priceRange.max - this.priceRange.min;
+			if (range === 0) return 10;
+			const bottom = Math.min(item.open, item.close);
+			return ((bottom - this.priceRange.min) / range) * 80 + 10;
+		},
+		
+		// 计算成交量高度（百分比）
+		getVolumeHeight(item) {
+			const range = this.volumeRange.max - this.volumeRange.min;
+			if (range === 0) return 0;
+			return ((item.volume - this.volumeRange.min) / range) * 100;
+		},
+		
+		// 选中K线柱
+		selectBar(item, index) {
+			this.selectedBar = item;
+			console.log('选中K线:', item);
+		},
 		
 		updateChart() {
 			if (!this.chartData || this.chartData.length === 0) return;
 			
 			try {
-				// #ifdef H5
-				this.drawCanvasChart();
-				// #endif
-				
-				// #ifdef APP-PLUS
 				this.updateDisplayData();
-				// #endif
 			} catch (error) {
 				console.error('图表更新失败:', error);
 			}
@@ -269,6 +304,22 @@ export default {
 			}
 			
 			return data;
+		},
+		
+		// 格式化时间显示
+		formatTime(timestamp) {
+			const date = new Date(timestamp);
+			const hours = date.getHours().toString().padStart(2, '0');
+			const minutes = date.getMinutes().toString().padStart(2, '0');
+			return `${hours}:${minutes}`;
+		},
+		
+		// 格式化成交量显示
+		formatVolume(volume) {
+			if (volume >= 10000) {
+				return (volume / 10000).toFixed(1) + '万';
+			}
+			return volume.toString();
 		}
 	}
 }
@@ -305,18 +356,137 @@ export default {
 	position: relative;
 	width: 100%;
 	background-color: #1a1a1a;
+	overflow: hidden;
 }
 
-.chart-canvas {
-	width: 100%;
-	height: 100%;
+/* 价格网格线 */
+.price-grid {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 75%; /* K线图占75%高度 */
+	z-index: 1;
 }
 
+.grid-line {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background-color: rgba(255, 255, 255, 0.1);
+	border-top: 1px dashed #333;
+}
+
+.grid-price {
+	position: absolute;
+	right: 5px;
+	top: -10px;
+	color: #666;
+	font-size: 10px;
+	background-color: #1a1a1a;
+	padding: 0 3px;
+}
+
+/* 滚动容器 */
 .chart-scroll {
 	height: 100%;
 	white-space: nowrap;
+	z-index: 2;
 }
 
+.chart-content {
+	display: inline-block;
+	height: 100%;
+	min-width: 100%;
+	position: relative;
+}
+
+/* K线柱状图容器 */
+.kline-bars {
+	display: flex;
+	align-items: flex-end;
+	height: 75%; /* K线图占75%高度 */
+	padding: 5px;
+	position: relative;
+}
+
+.kline-bar {
+	position: relative;
+	width: 8px;
+	height: 100%;
+	margin-right: 2px;
+	cursor: pointer;
+}
+
+/* 影线（最高最低价线） */
+.shadow-line {
+	position: absolute;
+	left: 50%;
+	width: 1px;
+	transform: translateX(-50%);
+	opacity: 0.8;
+}
+
+/* 实体（开盘收盘价矩形） */
+.body-rect {
+	position: absolute;
+	left: 20%;
+	width: 60%;
+	border: 1px solid;
+	opacity: 0.9;
+}
+
+/* 成交量柱状图 */
+.volume-bars {
+	display: flex;
+	align-items: flex-end;
+	height: 25%; /* 成交量占25%高度 */
+	padding: 2px 5px;
+	border-top: 1px solid #333;
+}
+
+.volume-bar {
+	width: 8px;
+	margin-right: 2px;
+	min-height: 1px;
+	border-radius: 1px 1px 0 0;
+}
+
+/* 价格信息悬浮框 */
+.price-info {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	background-color: rgba(0, 0, 0, 0.8);
+	border: 1px solid #333;
+	border-radius: 4px;
+	padding: 8px;
+	z-index: 10;
+	font-size: 12px;
+	min-width: 120px;
+}
+
+.info-time {
+	display: block;
+	color: #ccc;
+	font-weight: bold;
+	margin-bottom: 4px;
+}
+
+.info-price {
+	display: block;
+	color: #fff;
+	margin-bottom: 2px;
+}
+
+.info-volume {
+	display: block;
+	color: #999;
+	margin-top: 4px;
+}
+
+/* 旧的样式保留兼容 */
 .chart-bars {
 	display: flex;
 	align-items: flex-end;
