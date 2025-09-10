@@ -13,41 +13,48 @@
 			</view>
 		</view>
 		
-		<!-- K线图表容器 -->
+		<!-- K线图表容器 - 使用纯CSS实现 -->
 		<view class="chart-container" :style="{ height: chartHeight + 'px' }">
-			<!-- H5环境：简化为canvas直接渲染 -->
-			<!-- #ifdef H5 -->
-			<canvas 
-				ref="chartCanvas"
-				:id="chartId"
-				canvas-id="kline-canvas"
-				class="chart-canvas"
-				:style="{ width: '100%', height: '100%' }"
-				@touchstart="handleTouch"
-				@touchmove="handleTouch"
-				@touchend="handleTouch"
-			></canvas>
-			<!-- #endif -->
-			
-			<!-- APP环境：使用简单的柱状图模拟 -->
-			<!-- #ifdef APP-PLUS -->
+			<!-- 纯CSS K线图表 - 适用于所有平台 -->
 			<scroll-view class="chart-scroll" scroll-x="true">
-				<view class="chart-bars">
-					<view 
-						v-for="(item, index) in displayData" 
-						:key="index"
-						class="bar-item"
-						:style="{
-							height: getBarHeight(item) + 'px',
-							backgroundColor: item.close >= item.open ? '#00da3c' : '#ec0000'
-						}"
-					></view>
+				<view class="chart-content">
+					<!-- 价格网格线 -->
+					<view class="grid-lines">
+						<view class="grid-line" v-for="i in 5" :key="'grid-' + i"></view>
+					</view>
+					
+					<!-- K线数据展示 -->
+					<view class="kline-bars">
+						<view 
+							v-for="(item, index) in displayData" 
+							:key="'bar-' + index"
+							class="kline-item"
+							:class="{ 'rise': item.close >= item.open, 'fall': item.close < item.open }"
+						>
+							<!-- 影线 -->
+							<view 
+								class="shadow-line"
+								:style="{
+									height: getShadowHeight(item) + 'px',
+									top: getShadowTop(item) + 'px'
+								}"
+							></view>
+							
+							<!-- K线实体 -->
+							<view 
+								class="kline-body"
+								:style="{
+									height: getBodyHeight(item) + 'px',
+									top: getBodyTop(item) + 'px'
+								}"
+							></view>
+						</view>
+					</view>
 				</view>
 			</scroll-view>
-			<!-- #endif -->
 			
-			<!-- 加载状态 -->
-			<view v-if="loading" class="loading-overlay">
+			<!-- 加载状态 - 使用v-show替代v-if -->
+			<view class="loading-overlay" :style="{ display: loading ? 'flex' : 'none' }">
 				<view class="loading-spinner"></view>
 				<text class="loading-text">图表加载中...</text>
 			</view>
@@ -70,13 +77,14 @@ export default {
 	},
 	data() {
 		return {
-			chartId: 'kline-chart-' + Date.now(),
 			chartHeight: 300,
 			currentTimeType: '1m',
 			loading: false,
 			chartData: [],
 			displayData: [],
-			canvasContext: null,
+			maxPrice: 0,
+			minPrice: 0,
+			priceRange: 0,
 			timeOptions: [
 				{ label: '1分', value: '1m' },
 				{ label: '5分', value: '5m' },
@@ -113,19 +121,13 @@ export default {
 		this.initChart();
 	},
 	methods: {
-		async initChart() {
+		initChart() {
 			console.log('开始初始化K线图表...');
 			this.loading = true;
 			
 			try {
-				// #ifdef H5
-				await this.initH5Canvas();
-				// #endif
-				
-				// #ifdef APP-PLUS
-				await this.initAppChart();
-				// #endif
-				
+				// 使用纯CSS实现，无需平台特定代码
+				this.updateDisplayData();
 				this.loading = false;
 				console.log('K线图表初始化成功');
 			} catch (err) {
@@ -134,98 +136,63 @@ export default {
 			}
 		},
 		
-		// #ifdef H5
-		async initH5Canvas() {
-			await this.$nextTick();
-			this.canvasContext = uni.createCanvasContext('kline-canvas', this);
-			if (this.chartData && this.chartData.length > 0) {
-				this.drawCanvasChart();
+		updateChart() {
+			if (!this.chartData || this.chartData.length === 0) return;
+			
+			try {
+				this.updateDisplayData();
+				console.log('图表数据更新完成，显示', this.displayData.length, '条数据');
+			} catch (error) {
+				console.error('图表更新失败:', error);
 			}
-		},
-		
-		drawCanvasChart() {
-			if (!this.canvasContext || !this.chartData.length) return;
-			
-			const ctx = this.canvasContext;
-			const data = this.chartData.slice(-50);
-			const canvasWidth = 375;
-			const canvasHeight = this.chartHeight;
-			const barWidth = canvasWidth / data.length;
-			
-			ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-			
-			const prices = data.flatMap(item => [item.high, item.low]);
-			const maxPrice = Math.max(...prices);
-			const minPrice = Math.min(...prices);
-			const priceRange = maxPrice - minPrice;
-			
-			data.forEach((item, index) => {
-				const x = index * barWidth + barWidth / 2;
-				const openY = canvasHeight - ((item.open - minPrice) / priceRange) * canvasHeight;
-				const closeY = canvasHeight - ((item.close - minPrice) / priceRange) * canvasHeight;
-				const highY = canvasHeight - ((item.high - minPrice) / priceRange) * canvasHeight;
-				const lowY = canvasHeight - ((item.low - minPrice) / priceRange) * canvasHeight;
-				
-				const color = item.close >= item.open ? '#00da3c' : '#ec0000';
-				ctx.setStrokeStyle(color);
-				ctx.setFillStyle(color);
-				
-				ctx.beginPath();
-				ctx.moveTo(x, highY);
-				ctx.lineTo(x, lowY);
-				ctx.stroke();
-				
-				const bodyTop = Math.min(openY, closeY);
-				const bodyHeight = Math.abs(closeY - openY);
-				const bodyWidth = barWidth * 0.6;
-				
-				ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight || 1);
-			});
-			
-			ctx.draw();
-		},
-		
-		handleTouch(e) {
-			console.log('图表触摸事件:', e.type);
-		},
-		// #endif
-		
-		// #ifdef APP-PLUS
-		async initAppChart() {
-			this.updateDisplayData();
 		},
 		
 		updateDisplayData() {
 			if (!this.chartData || this.chartData.length === 0) return;
 			
-			this.displayData = this.chartData.slice(-50).map(item => ({
-				...item,
-				barHeight: this.getBarHeight(item)
-			}));
-		},
-		
-		getBarHeight(item) {
-			const baseHeight = 20;
-			const maxHeight = this.chartHeight - 40;
-			const range = Math.abs(item.high - item.low);
-			return Math.min(baseHeight + range * 2, maxHeight);
-		},
-		// #endif
-		
-		updateChart() {
-			if (!this.chartData || this.chartData.length === 0) return;
+			// 取最近50条数据
+			const recentData = this.chartData.slice(-50);
 			
-			try {
-				// #ifdef H5
-				this.drawCanvasChart();
-				// #endif
-				
-				// #ifdef APP-PLUS
-				this.updateDisplayData();
-				// #endif
-			} catch (error) {
-				console.error('图表更新失败:', error);
-			}
+			// 计算价格范围
+			const prices = recentData.flatMap(item => [item.high, item.low]);
+			this.maxPrice = Math.max(...prices);
+			this.minPrice = Math.min(...prices);
+			this.priceRange = this.maxPrice - this.minPrice || 1; // 防止除零
+			
+			this.displayData = recentData;
+		},
+		
+		// 计算影线高度
+		getShadowHeight(item) {
+			const highPos = this.getPricePosition(item.high);
+			const lowPos = this.getPricePosition(item.low);
+			return Math.abs(lowPos - highPos);
+		},
+		
+		// 计算影线顶部位置
+		getShadowTop(item) {
+			return this.getPricePosition(item.high);
+		},
+		
+		// 计算K线实体高度
+		getBodyHeight(item) {
+			const openPos = this.getPricePosition(item.open);
+			const closePos = this.getPricePosition(item.close);
+			return Math.max(Math.abs(closePos - openPos), 2); // 最小高度2px
+		},
+		
+		// 计算K线实体顶部位置
+		getBodyTop(item) {
+			const openPos = this.getPricePosition(item.open);
+			const closePos = this.getPricePosition(item.close);
+			return Math.min(openPos, closePos);
+		},
+		
+		// 根据价格计算在图表中的位置
+		getPricePosition(price) {
+			const chartAreaHeight = this.chartHeight - 40; // 预留上下边距
+			const normalizedPrice = (price - this.minPrice) / this.priceRange;
+			return 20 + (1 - normalizedPrice) * chartAreaHeight; // 翻转Y轴
 		},
 		
 		selectTimeType(timeType) {
@@ -294,6 +261,7 @@ export default {
 	color: #999;
 	border-radius: 4px;
 	font-size: 12px;
+	transition: all 0.2s ease;
 }
 
 .time-item.active {
@@ -305,30 +273,98 @@ export default {
 	position: relative;
 	width: 100%;
 	background-color: #1a1a1a;
-}
-
-.chart-canvas {
-	width: 100%;
-	height: 100%;
+	overflow: hidden;
 }
 
 .chart-scroll {
 	height: 100%;
-	white-space: nowrap;
+	width: 100%;
 }
 
-.chart-bars {
+.chart-content {
+	position: relative;
+	height: 100%;
+	min-width: 100%;
+	display: flex;
+}
+
+.grid-lines {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.grid-line {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.grid-line:nth-child(1) { top: 20%; }
+.grid-line:nth-child(2) { top: 35%; }
+.grid-line:nth-child(3) { top: 50%; }
+.grid-line:nth-child(4) { top: 65%; }
+.grid-line:nth-child(5) { top: 80%; }
+
+.kline-bars {
+	position: relative;
 	display: flex;
 	align-items: flex-end;
 	height: 100%;
-	padding: 10px;
+	padding: 0 10px;
+	min-width: 100%;
+	z-index: 2;
 }
 
-.bar-item {
-	width: 6px;
+.kline-item {
+	position: relative;
+	width: 8px;
+	height: 100%;
 	margin-right: 2px;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+
+.shadow-line {
+	position: absolute;
+	left: 50%;
+	width: 1px;
+	transform: translateX(-50%);
+	transition: none;
+}
+
+.kline-item.rise .shadow-line {
+	background-color: #00da3c;
+}
+
+.kline-item.fall .shadow-line {
+	background-color: #ec0000;
+}
+
+.kline-body {
+	position: absolute;
+	left: 0;
+	right: 0;
 	min-height: 2px;
 	border-radius: 1px;
+	transition: none;
+}
+
+.kline-item.rise .kline-body {
+	background-color: #00da3c;
+	border: 1px solid #00da3c;
+}
+
+.kline-item.fall .kline-body {
+	background-color: #ec0000;
+	border: 1px solid #ec0000;
 }
 
 .loading-overlay {
@@ -337,7 +373,6 @@ export default {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	display: flex;
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
@@ -363,5 +398,20 @@ export default {
 @keyframes spin {
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
-} 
+}
+
+/* 响应式设计 */
+@media screen and (max-width: 400px) {
+	.kline-item {
+		width: 6px;
+		margin-right: 1px;
+	}
+}
+
+@media screen and (min-width: 800px) {
+	.kline-item {
+		width: 12px;
+		margin-right: 3px;
+	}
+}
 </style>
