@@ -1,0 +1,594 @@
+<template>
+	<view>
+		<guo-headerTitle :title="$t('user.rj')"></guo-headerTitle>
+		<view class="tui-pd">
+			<view class="tui-card">
+				<uni-forms ref="baseForm" :modelValue="formData" label-position="top" label-width="200px">
+					<uni-forms-item>
+						<view class="tui-form" style="width: 100%;">
+							<view class="title">
+								{{$t('top.money')}}
+							</view>
+							<view class="flex flex-column">
+								<view class="tui-inputBox">
+									<view class="font-bolder">
+										
+									</view>
+									<input v-model="formData.money"  type="text" class="input" style="height: 50rpx;font-size: 32rpx;line-height: 32rpx;"/>
+								</view>
+
+							</view>
+						</view>
+					</uni-forms-item>
+					<uni-forms-item :label="$t('top.xzrjfs')">
+						<view class="tui-list">
+							<view class="tui-listItem" @click="onClickOpen">
+								<view class="flex-item flex">
+									<view class="title">
+										{{type}}▽
+									</view>
+								</view>
+							</view>
+				
+
+						</view>
+					</uni-forms-item>
+				
+					
+					<template v-if="formData.pay_type == 'usdt-erc20'">
+						<uni-forms-item :label="$t('withdraw-money.dz')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{erc20_a}}
+								</div>
+								<div @click="onClickFuzhi(erc20_a)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+						
+					</template>
+					<template v-if="formData.pay_type == 'eth'">
+						<uni-forms-item :label="$t('withdraw-money.dz')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{eth_a}}
+								</div>
+								<div @click="onClickFuzhi(eth_a)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+						
+					</template>
+					<template v-if="formData.pay_type == 'btc'">
+						<uni-forms-item :label="$t('withdraw-money.dz')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{btc_a}}
+								</div>
+								<div  style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									<view @click="onClickFuzhi(btc_a)">
+										Copy
+									</view>
+									
+								</div>
+							</div>
+						</uni-forms-item>
+						
+					</template>
+					<!-- trc和erc的 -->
+					<template v-if="formData.pay_type == 'usdt-trc20'">
+						<uni-forms-item :label="$t('withdraw-money.dz')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{trc20_a}}
+								</div>
+								<div @click="onClickFuzhi(trc20_a)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+						
+					</template>
+					<template v-if="formData.pay_type == 'bank_card'">
+						<uni-forms-item :label="$t('withdraw-money.khh')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{bank_card_a.web_bank_name}}
+								</div>
+								<div @click="onClickFuzhi(bank_card_a.web_bank_name)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+						
+						<uni-forms-item :label="$t('withdraw-money.khdz')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{bank_card_a.web_bank_place}}
+								</div>
+								<div @click="onClickFuzhi(bank_card_a.web_bank_place)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+						<uni-forms-item :label="$t('withdraw-money.xm')">
+						<view class="tui-list">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{bank_card_a.web_bank_user}}
+								</div>
+								<div @click="onClickFuzhi(bank_card_a.web_bank_user)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</view>
+						</uni-forms-item>
+						<uni-forms-item :label="$t('withdraw-money.kh')">
+							<div class="hangs" style="">
+								<div style="flex: 9;text-align: left;">
+									{{bank_card_a.web_bank_number}}
+								</div>
+								<div @click="onClickFuzhi(bank_card_a.web_bank_number)" style="flex: 1;text-align: center;background: #f7ce46;padding: 0 12rpx;border-radius: 20rpx;line-height: 62rpx;font-size: 24rpx;">
+									Copy
+								</div>
+							</div>
+						</uni-forms-item>
+					</template>
+					<div style="background-color: #fff;padding: 10rpx;width: 100%;">
+						<div style="font-size: 24rpx;font-weight: 700;">
+							{{$t('top.rjtip')}}
+						</div>
+						<div style="width: 100%;margin-top: 16rpx;margin-bottom: 16rpx;text-align: center;">
+							<img :src="formData.noimg"  @tap="chooseImages" style="width: 400rpx;">
+						</div>
+					</div>
+					<view class="tui-submit"  @click="onSubmit">
+						{{$t('top.qdrj')}}
+					</view>
+
+				</uni-forms>
+			</view>
+		</view>
+		<uni-popup ref="popup" type="bottom" @maskClick="maskClick">
+			<view class="tui-popupContent">
+				<view class="flex flex-between flex-item p-26">
+					<view class="title">
+						{{$t('top.xzrjfs')}}
+					</view>
+					<view class="cancle" @click="onClickCancle">
+						{{$t('withdraw-money.qx')}}
+					</view>
+				</view>
+				<view class="tui-content">
+					<view class="tui-contentItem" v-for="(value,key,index) in typeList" :key="index"
+						@click="onClickCurrentIndex(key,index,value)" :class="[{'tui-activite':formData.pay_type==key}]">
+						{{value}}
+					</view>
+
+				</view>
+			</view>
+		</uni-popup>
+	</view>
+</template>
+
+<script>
+	import {
+		userInfo,
+		userGetCash,
+		userWithdraw,
+		getUserIndex,
+		userDepositdo,
+		userDeposit
+	} from "@/api/user.js"
+
+	export default {
+		data() {
+			return {
+				formData: {
+					money: '',
+					pay_type: 'usdt-trc20',
+					noimg: require("@/static/noimage.png"),
+				},
+				imageUrl: '',
+				typeList: {
+					'usdt-trc20': 'USDT-TRC20',
+					'usdt-erc20': 'USDT-ERC20',
+					'btc':'BTC',
+					'eth':'ETH',
+					'bank_card': this.$t('withdraw-money.yhk'),
+				},
+
+				typeShow: true,
+				styles: {
+					'borderColor': '#fff'
+				},
+				type:'USDT-TRC20',
+				trc20_a: '',
+				erc20_a: '',
+				btc_a:'',
+				eth_a:'',
+				bank_card_a: {
+					web_bank_name: '',
+					web_bank_place: '',
+					web_bank_user: '',
+					web_bank_number: ''
+				},
+				userInfo: {},
+				cashInfo: {},
+				getUserItem: {}
+			};
+		},
+		onShow() {
+			
+			this.getDetail()
+		},
+		onLoad() {
+			
+			
+		},
+		computed: {
+			btnDisabled() {
+				const {
+					formData
+				} = this
+				if (!this.binded) {
+					return true
+				}
+				console.log(formData)
+				try {
+					Object.entries(formData).forEach(([key, val]) => {
+						if (!val && key !== 'usdt_url') {
+							throw this.$t('withdraw-money.ykz')
+						}
+					})
+				} catch (e) {
+					return true
+				}
+				// if (this.formData.money > this.userInfo.money) {
+				// 	return true
+				// }
+				return false
+			},
+			
+			binded() {
+				const {
+					cashInfo,
+					formData: {
+						pay_type
+					}
+				} = this
+				if (cashInfo[pay_type]) {
+					try {
+						Object.entries(cashInfo[pay_type]).forEach(([key, val]) => {
+							if (!val) {
+								throw this.$t('withdraw-money.ykz')
+							}
+						})
+					} catch (e) {
+						return false
+					}
+					return true
+				}
+			},
+			selectCashInfo() {
+				const {
+					cashInfo,
+					formData: {
+						pay_type
+					}
+				} = this
+				if (cashInfo[pay_type])
+					return cashInfo[pay_type]
+				else {
+					return {}
+				}
+			},
+			
+		},
+		methods: {
+			getUserIndex() {
+				getUserIndex({
+					hideLoading: true,
+				}).then(({
+					data
+				}) => {
+
+					this.getUserItem = data;
+				});
+			},chooseImages() {
+			      uni.chooseImage({
+			        count: 1,
+			        success: (res) => {
+					uni.request({	
+								url: res.tempFilePaths[0],
+								method:'GET',
+								responseType:'arraybuffer',
+								success: ress => {				
+									this.formData.noimg='data:image/jpeg;base64,' + uni.arrayBufferToBase64(ress.data);
+								},fail: (e) => {
+									console.log("图片转换失败");
+					
+								}
+					
+							})
+			          
+			        }
+			      })
+			    },
+			onClickFuzhi(text) {
+				uni.setClipboardData({
+					data: text,
+					success: ()=> {
+						console.log('复制成功');
+						// 可以添加用户友好的提示，例如使用uni.showToast提示复制成功
+						uni.showToast({
+							title: 'Copy Success',
+							icon: 'none',
+							duration: 2000
+						});
+					}
+				});
+			},
+			onSubmit() {
+				if(this.formData.noimg==require("@/static/noimage.png") || this.formData.money=='' ){
+					return false;
+				}
+				userDepositdo({
+					...this.formData,
+				}).then(({
+					data
+				}) => {
+					uni.showModal({
+						title: this.$t('withdraw-money.czcg'),
+						content: this.$t('withdraw-money.nxdd'),
+						confirmText: "Sure",
+						showCancel: false,
+					}).then(_ => {
+						uni.navigateBack()
+					})
+
+				})
+			},
+			onClickDetail(type) {
+				uni.navigateTo({
+					url: '/pages/account/account-detail?pay_type=' + type
+				})
+			},
+			getDetail() {
+				userInfo().then(({
+					data
+				}) => {
+					this.userInfo = data
+				})
+				userGetCash().then(({
+					data
+				}) => {
+					this.cashInfo = data || {}
+				})
+				userDeposit().then(({
+					data
+				}) => {
+					//console.log(data);
+					this.trc20_a=data.trc20;
+					this.erc20_a=data.erc20;
+					this.btc_a=data.btc;
+					this.eth_a=data.eth;
+					this.bank_card_a.web_bank_name=data.web_bank_name;
+					this.bank_card_a.web_bank_place=data.web_bank_place;
+					this.bank_card_a.web_bank_user=data.web_bank_user;
+					this.bank_card_a.web_bank_number=data.web_bank_number;
+				})
+			},
+			maskClick() {
+				this.typeShow = true
+			},
+			onClickOpen() {
+				this.$refs.popup.open()
+				this.typeShow = false
+			},
+			onClickCancle() {
+				this.$refs.popup.close()
+				this.typeShow = true
+			},
+			onClickCurrentIndex(item, index,value) {
+				this.getUserIndex();
+				console.log(item);
+				this.formData.pay_type = item;
+				this.type=value;
+				this.$refs.popup.close()
+				this.typeShow = true
+			}
+		}
+	}
+</script>
+
+<style lang="less">
+	.hangs{
+		padding: 10rpx 10rpx;
+		display: flex;
+		width: 100%;
+		justify-content: space-around;
+		align-items: center;
+		height: 62rpx;
+		background-color: #fff;
+	}
+	.tui-activite {
+		background-color: #f3f5f6 !important;
+		color: #1150c2 !important;
+	}
+
+	.tui-cancle {
+		background-color: rgb(241, 243, 246) !important;
+		color: #a8a9ac !important;
+		opacity: .5;
+	}
+
+	.tui-submit {
+		margin-top: 44rpx;
+		background: #1150c2;
+		color: #fff;
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 20rpx;
+		padding: 30rpx 0;
+		font-size: 32rpx;
+	}
+
+	.tui-popupContent {
+		border-radius: 24px 24px 0 0;
+		padding: 48rpx 0 0;
+		background-color: #fff;
+
+		.p-26 {
+			padding: 0 32rpx;
+		}
+
+		.tui-content {
+			margin-top: 40rpx;
+			padding-bottom: 100rpx;
+
+			.tui-contentItem {
+				height: 100rpx;
+				line-height: 100rpx;
+				font-size: 28rpx;
+				color: #222;
+				display: flex;
+				align-items: center;
+				padding: 0 32rpx;
+			}
+		}
+
+		.title {
+			font-size: 32rpx;
+			font-weight: 800;
+			color: #222;
+		}
+
+		.cancle {
+			color: #a8a9ac;
+			font-size: 28rpx;
+		}
+	}
+
+	.tui-list {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+
+		.tui-listItem {
+			width: 100%;
+			font-size: 30rpx;
+			background-color: #fff;
+			border-radius: 13px;
+			padding:10rpx 30rpx;
+			/* #ifndef APP-PLUS-NVUE */
+			box-sizing: border-box;
+			/* #endif */
+			display: flex;
+
+			display: flex;
+
+			align-items: center;
+			justify-content: space-between;
+
+			.language {
+				color: #a8a9ac;
+				font-size: 30rpx;
+				padding-right: 20rpx;
+			}
+
+			.tui-rightIcon {
+				width: 6px;
+				height: 11px;
+			}
+
+			.title {
+				font-size: 30rpx;
+				color: #222;
+			}
+
+			.logo {
+				width: 60rpx;
+				height: 60rpx;
+				border-radius: 50%;
+				margin-right: 20rpx;
+			}
+		}
+	}
+
+	.tui-pd {
+		padding: 0 36rpx;
+
+		.tui-card {
+
+			padding-bottom: 40rpx;
+
+			.tui-form {
+				background: linear-gradient(125deg, #fff, #fff);
+				padding: 24rpx 40rpx;
+				display: flex;
+				flex-direction: column;
+				font-size: 28rpx;
+				color: #303133;
+				border-radius: 13px;
+
+				.bottom {
+					font-size: 24rpx;
+					padding-top: 8rpx;
+
+					text {
+						color: #fc6d22;
+					}
+				}
+
+				.tui-inputBox {
+					height: 100rpx;
+					border-bottom: 1px solid rgba(0, 0, 0, .18);
+					display: flex;
+					align-items: center;
+
+
+					.font-bolder {
+						font-weight: 800;
+						font-size: 62rpx;
+					}
+
+					.input {
+						flex: 1;
+						height: 100rpx;
+						font-size: 62rpx;
+					}
+				}
+
+				.title {
+					font-size: 24rpx;
+				}
+			}
+		}
+	}
+
+	/* #ifndef APP-PLUS-NVUE */
+	/deep/.uni-easyinput__content {
+		border-radius: 30rpx;
+		border-color: #fff !important;
+	}
+
+	/deep/.uni-easyinput__content-input {
+		height: 95rpx;
+		border-radius: 30rpx;
+	}
+
+	/deep/.uni-easyinput {
+		background-color: #fff;
+		border-radius: 30rpx;
+	}
+
+	/deep/.uni-forms-item__label {
+		color: #a8a9ac !important;
+	}
+	/* #endif */
+</style>
